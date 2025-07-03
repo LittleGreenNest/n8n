@@ -13,11 +13,11 @@ services:
         value: "L0bst3r_Br0thz"
       - key: WEBHOOK_URL
         value: "hhttps://n8n-6udz.onrender.com"
-      - key: N8N_HOST
-        value: "0.0.0.0"
       - key: N8N_PORT
         value: "5678"
-      - key: DB_TYPE
-        value: "sqlite"
+      - key: N8N_HOST
+        value: "0.0.0.0"
+      - key: N8N_USER_FOLDER
+        value: "/home/node/.n8n"
       - key: GENERIC_TIMEZONE
         value: "Asia/Singapore"
