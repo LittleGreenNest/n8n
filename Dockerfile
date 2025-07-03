@@ -1,4 +1,2 @@
-FROM n8nio/n8n
-
-# Optional: Set your timezone
-ENV TZ=Asia/Singapore
+# Use official N8N image
+FROM n8nio/n8n:latest
