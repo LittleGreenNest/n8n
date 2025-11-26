@@ -1,4 +1,16 @@
+import { setTimeout as wait } from 'node:timers/promises';
 import type { StartedTestContainer, StoppedTestContainer } from 'testcontainers';
+
+import {
+	getMailpitApiBaseUrl,
+	mailpitWaitForMessage,
+	mailpitList,
+	mailpitClear,
+	mailpitGet,
+	type MailpitQuery,
+	type MailpitMessage,
+	type MailpitMessageSummary,
+} from './n8n-test-container-mailpit';
 
 export interface LogMatch {
 	container: StartedTestContainer;
@@ -11,6 +23,7 @@ interface WaitForLogOptions {
 	namePattern?: string | RegExp;
 	timeoutMs?: number;
 	caseSensitive?: boolean;
+	throwOnTimeout?: boolean;
 }
 
 interface StreamLogMatch {
@@ -29,8 +42,18 @@ export class ContainerTestHelpers {
 	// Containers
 	private containers: StartedTestContainer[];
 
+	private _mailHelper?: MailHelper;
+
 	constructor(containers: StartedTestContainer[]) {
 		this.containers = containers;
+	}
+
+	/**
+	 * Mail helper facade for Mailpit interactions
+	 */
+	get mail(): MailHelper {
+		this._mailHelper ??= new MailHelper(this.containers);
+		return this._mailHelper;
 	}
 
 	/**
@@ -49,15 +72,19 @@ export class ContainerTestHelpers {
 	/**
 	 * Wait for a log message matching pattern (case-insensitive by default)
 	 * Uses streaming approach for immediate detection
+	 *
+	 * @returns LogMatch if found, null if timeout reached and throwOnTimeout is false
+	 * @throws Error if timeout reached and throwOnTimeout is true (default)
 	 */
 	async waitForLog(
 		messagePattern: string | RegExp,
 		options: WaitForLogOptions = {},
-	): Promise<LogMatch> {
+	): Promise<LogMatch | null> {
 		const {
 			namePattern,
 			timeoutMs = ContainerTestHelpers.DEFAULT_TIMEOUT_MS,
 			caseSensitive = false,
+			throwOnTimeout = true,
 		} = options;
 
 		const messageRegex = this.createRegex(messagePattern, caseSensitive);
@@ -65,7 +92,7 @@ export class ContainerTestHelpers {
 		const startTime = Date.now();
 
 		console.log(
-			`🔍 Waiting for log pattern: ${messageRegex} in ${targetContainers.length} containers (timeout: ${timeoutMs}ms)`,
+			`🔍 Waiting for log pattern: ${messageRegex} in ${targetContainers.length} containers (timeout: ${timeoutMs}ms, throwOnTimeout: ${throwOnTimeout})`,
 		);
 
 		// First check: scan existing logs quickly
@@ -76,7 +103,13 @@ export class ContainerTestHelpers {
 		}
 
 		// Monitor new logs with streaming approach
-		return await this.pollForNewLogs(targetContainers, messageRegex, startTime, timeoutMs);
+		return await this.pollForNewLogs(
+			targetContainers,
+			messageRegex,
+			startTime,
+			timeoutMs,
+			throwOnTimeout,
+		);
 	}
 
 	/**
@@ -112,20 +145,22 @@ export class ContainerTestHelpers {
 		messageRegex: RegExp,
 		startTime: number,
 		timeoutMs: number,
-	): Promise<LogMatch> {
+		throwOnTimeout: boolean,
+	): Promise<LogMatch | null> {
 		let currentCheckTime = Math.floor(Date.now() / 1000);
 		let iteration = 0;
 
 		while (Date.now() - startTime < timeoutMs) {
 			iteration++;
-			await this.sleep(ContainerTestHelpers.POLL_INTERVAL_MS);
+			await wait(ContainerTestHelpers.POLL_INTERVAL_MS);
 
 			// Capture the timestamp for this iteration to avoid race conditions
 			const checkTimestamp = currentCheckTime;
 
 			// Check all containers concurrently
-			const matchPromises = targetContainers.map((container) =>
-				this.checkContainerForMatch(container, messageRegex, checkTimestamp),
+			const matchPromises = targetContainers.map(
+				async (container) =>
+					await this.checkContainerForMatch(container, messageRegex, checkTimestamp),
 			);
 
 			const results = await Promise.all(matchPromises);
@@ -147,7 +182,12 @@ export class ContainerTestHelpers {
 		}
 
 		console.log(`❌ Timeout reached after ${timeoutMs}ms`);
-		throw new Error(`Timeout reached after ${timeoutMs}ms`);
+
+		if (throwOnTimeout) {
+			throw new Error(`Timeout reached after ${timeoutMs}ms`);
+		}
+
+		return null;
 	}
 
 	/**
@@ -228,6 +268,7 @@ export class ContainerTestHelpers {
 	 * Strip ANSI escape codes from log text
 	 */
 	private stripAnsiCodes(text: string): string {
+		// eslint-disable-next-line no-control-regex
 		return text.replace(/\x1B\[[0-9;]*[mGKH]/g, '');
 	}
 
@@ -248,7 +289,7 @@ export class ContainerTestHelpers {
 		since?: number,
 	): Promise<StreamLogMatch | null> {
 		try {
-			const logOptions: any = {};
+			const logOptions: { since?: number } = {};
 			if (since !== undefined) {
 				logOptions.since = since;
 			}
@@ -311,7 +352,7 @@ export class ContainerTestHelpers {
 		since?: number,
 	): Promise<string> {
 		try {
-			const logOptions: any = {};
+			const logOptions: { since?: number } = {};
 			if (since !== undefined) {
 				logOptions.since = since;
 			}
@@ -370,8 +411,38 @@ export class ContainerTestHelpers {
 
 		return matches;
 	}
+}
 
-	private sleep(ms: number): Promise<void> {
-		return new Promise((resolve) => setTimeout(resolve, ms));
+class MailHelper {
+	constructor(private containers: StartedTestContainer[]) {}
+
+	private getMailpitContainer(): StartedTestContainer {
+		const container = this.containers.find((c) => /mailpit/i.test(c.getName()));
+		if (!container) throw new Error('Mailpit container not found');
+		return container;
+	}
+
+	private get apiBaseUrl(): string {
+		const mailpit = this.getMailpitContainer();
+		return getMailpitApiBaseUrl(mailpit);
+	}
+
+	async waitForMessage(
+		query: MailpitQuery,
+		options?: { timeoutMs?: number; pollMs?: number },
+	): Promise<MailpitMessageSummary> {
+		return await mailpitWaitForMessage(this.apiBaseUrl, query, options);
+	}
+
+	async list(): Promise<MailpitMessageSummary[]> {
+		return await mailpitList(this.apiBaseUrl);
+	}
+
+	async clear(): Promise<void> {
+		await mailpitClear(this.apiBaseUrl);
+	}
+
+	async get(id: string): Promise<MailpitMessage> {
+		return await mailpitGet(this.apiBaseUrl, id);
 	}
 }

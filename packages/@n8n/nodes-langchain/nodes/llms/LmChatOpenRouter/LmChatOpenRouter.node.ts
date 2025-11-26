@@ -7,7 +7,7 @@ import {
 	type SupplyData,
 } from 'n8n-workflow';
 
-import { getHttpProxyAgent } from '@utils/httpProxyAgent';
+import { getProxyAgent } from '@utils/httpProxyAgent';
 import { getConnectionHintNoticeField } from '@utils/sharedFields';
 
 import type { OpenAICompatibleCredential } from '../../../types/types';
@@ -227,11 +227,13 @@ export class LmChatOpenRouter implements INodeType {
 
 		const configuration: ClientOptions = {
 			baseURL: credentials.url,
-			httpAgent: getHttpProxyAgent(),
+			fetchOptions: {
+				dispatcher: getProxyAgent(credentials.url),
+			},
 		};
 
 		const model = new ChatOpenAI({
-			openAIApiKey: credentials.apiKey,
+			apiKey: credentials.apiKey,
 			model: modelName,
 			...options,
 			timeout: options.timeout ?? 60000,

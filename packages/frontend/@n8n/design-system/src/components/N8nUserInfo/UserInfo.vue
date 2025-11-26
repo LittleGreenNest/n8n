@@ -6,7 +6,7 @@ import N8nAvatar from '../N8nAvatar';
 import N8nBadge from '../N8nBadge';
 import N8nText from '../N8nText';
 
-interface UsersInfoProps {
+export interface UsersInfoProps {
 	firstName?: string | null;
 	lastName?: string | null;
 	email?: string | null;
@@ -56,13 +56,6 @@ const classes = computed(
 			</div>
 			<div>
 				<N8nText data-test-id="user-email" size="small" color="text-light">{{ email }}</N8nText>
-				<N8nText color="text-light"> | </N8nText>
-				<N8nText
-					data-test-id="user-mfa-state"
-					size="small"
-					:color="mfaEnabled ? 'text-light' : 'warning'"
-					>{{ mfaEnabled ? '2FA Enabled' : '2FA Disabled' }}</N8nText
-				>
 			</div>
 		</div>
 	</div>
@@ -78,7 +71,7 @@ const classes = computed(
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--color-text-light);
+	color: var(--color--text--tint-1);
 }
 
 .infoContainer {
@@ -86,18 +79,18 @@ const classes = computed(
 	display: inline-flex;
 	flex-direction: column;
 	justify-content: center;
-	margin-left: var(--spacing-xs);
+	margin-left: var(--spacing--xs);
 }
 
 .pendingUser {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	margin-left: var(--spacing-xs);
+	margin-left: var(--spacing--xs);
 }
 
 .pendingBadge {
-	margin-left: var(--spacing-xs);
+	margin-left: var(--spacing--xs);
 }
 
 .disabled {

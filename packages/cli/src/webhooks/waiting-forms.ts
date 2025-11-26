@@ -10,11 +10,12 @@ import {
 } from 'n8n-workflow';
 
 import { ConflictError } from '@/errors/response-errors/conflict.error';
+import { getWorkflowActiveStatusFromWorkflowData } from '@/executions/execution.utils';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
 import { WaitingWebhooks } from '@/webhooks/waiting-webhooks';
 
-import type { IWebhookResponseCallbackData, WaitingWebhookRequest } from './webhook.types';
 import { sanitizeWebhookRequest } from './webhook-request-sanitizer';
+import type { IWebhookResponseCallbackData, WaitingWebhookRequest } from './webhook.types';
 
 @Service()
 export class WaitingForms extends WaitingWebhooks {
@@ -30,14 +31,14 @@ export class WaitingForms extends WaitingWebhooks {
 		}
 	}
 
-	private getWorkflow(execution: IExecutionResponse) {
+	protected getWorkflow(execution: IExecutionResponse) {
 		const { workflowData } = execution;
 		return new Workflow({
 			id: workflowData.id,
 			name: workflowData.name,
 			nodes: workflowData.nodes,
 			connections: workflowData.connections,
-			active: workflowData.active,
+			active: getWorkflowActiveStatusFromWorkflowData(workflowData),
 			nodeTypes: this.nodeTypes,
 			staticData: workflowData.staticData,
 			settings: workflowData.settings,
